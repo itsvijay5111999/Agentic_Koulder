@@ -5,6 +5,7 @@ Place this file in the SAME directory as your backend file (backend.py).
 Run with: streamlit run streamlit_app.py
 """
 
+
 import streamlit as st
 import json
 import base64
