@@ -204,14 +204,36 @@ llm_with_tools = model.bind_tools(tools)
 class ChatState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
 
-
 def chat_node(state: ChatState) -> dict:
-    """
-    This node invokes the LLM with the current state of messages and returns the AI's response.
-    It ensures the response is properly formatted for serialization.
-    """
-    response = llm_with_tools.invoke(state["messages"])
-    return {"messages": [response]}
+    try:
+        print("===== CHAT NODE STARTED =====")
+
+        print("Messages:", state["messages"])
+
+        groq_key = os.getenv("GROQ_API_KEY")
+        print("GROQ KEY EXISTS:", bool(groq_key))
+
+        tavily_key = os.getenv("TAVILY_API_KEY")
+        print("TAVILY KEY EXISTS:", bool(tavily_key))
+
+        print("===== BEFORE LLM INVOKE =====")
+
+        response = llm_with_tools.invoke(state["messages"])
+
+        print("===== AFTER LLM INVOKE =====")
+        print(response)
+
+        return {"messages": [response]}
+
+    except Exception as e:
+        print("===== ERROR IN CHAT NODE =====")
+        print(str(e))
+
+        return {
+            "messages": [
+                AIMessage(content=f"Error: {str(e)}")
+            ]
+        }
 
 tool_node = ToolNode(tools)
 

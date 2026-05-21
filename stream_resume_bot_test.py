@@ -5,6 +5,9 @@ Place this file in the SAME directory as your backend file (backend.py).
 Run with: streamlit run streamlit_app.py
 """
 
+print("\n" + "="*60)
+print("🚀 STARTING AGENTIC AI CHATBOT")
+print("="*60)
 
 import streamlit as st
 import json
@@ -17,20 +20,38 @@ from datetime import datetime
 from io import BytesIO
 from PIL import Image
 
+print(f"[INIT] Python version: {os.sys.version}")
+print(f"[INIT] Working directory: {os.getcwd()}")
+print(f"[INIT] Files in directory: {os.listdir('.')[:10]}")  # List first 10 files
+
 # ─── LangChain / LangGraph imports ───────────────────────────────────────────
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, AIMessageChunk
 
+print("\n[INIT] Checking environment variables...")
+print(f"[INIT] GROQ_API_KEY set: {'✓' if os.getenv('GROQ_API_KEY') else '✗ MISSING'}")
+print(f"[INIT] SERPAPI_API_KEY set: {'✓' if os.getenv('SERPAPI_API_KEY') else '✗ MISSING'}")
+print(f"[INIT] YOUTUBE_API_KEY set: {'✓' if os.getenv('YOUTUBE_API_KEY') else '⚠ OPTIONAL'}")
+print(f"[INIT] TAVILY_API_KEY set: {'✓' if os.getenv('TAVILY_API_KEY') else '⚠ OPTIONAL'}")
+print()
+
 # ─── Backend import ───────────────────────────────────────────────────────────
 # Adjust the import path / module name if your backend file is named differently.
+print("[INIT] Starting imports...")
 try:
+    print("[INIT] Importing backend.chatbot...")
     from backend import chatbot, retrieve_all_threads
+    print("[INIT] ✓ Successfully imported chatbot")
     try:
         from backend import get_latest_news
+        print("[INIT] ✓ Successfully imported get_latest_news")
     except ImportError:
         # Fallback if get_latest_news not available
+        print("[INIT] ⚠ get_latest_news not found, using fallback")
         def get_latest_news():
             return []
 except ImportError as e:
+    print(f"[INIT] ✗ Import failed: {e}")
+    print(f"[INIT] Full error: {traceback.format_exc()}")
     st.error(
         f"❌ Could not import backend: {e}\n\n"
         "**Make sure backend.py is in the same directory.**\n\n"
@@ -39,9 +60,12 @@ except ImportError as e:
         "- SERPAPI_API_KEY\n"
         "- YOUTUBE_API_KEY (optional)\n"
         "- TAVILY_API_KEY (optional)\n\n"
-        "Check Render logs for detailed errors."
+        "**Check Render logs for:**\n"
+        f"Error: {e}"
     )
     st.stop()
+
+print("[INIT] ✓ All imports successful")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE CONFIG & GLOBAL CSS
@@ -523,10 +547,22 @@ def stream_chat(user_prompt: str):
         tool_placeholder.markdown(html, unsafe_allow_html=True)
 
     # ── Stream ──────────────────────────────────────────────────────────────
+    print(f"\n[STREAM] Step 1: Starting stream for prompt: {user_prompt[:50]}...")
+    print(f"[STREAM] Step 2: Config = {config}")
+    print(f"[STREAM] Step 3: Input message created")
+    
     try:
-        for chunk, metadata in chatbot.stream(
-            input_msg, config, stream_mode="messages"
-        ):
+        print("[STREAM] Step 4: Calling chatbot.stream()...")
+        stream_iterator = chatbot.stream(input_msg, config, stream_mode="messages")
+        print(f"[STREAM] Step 5: Got stream iterator: {type(stream_iterator)}")
+        
+        chunk_count = 0
+        for chunk, metadata in stream_iterator:
+            chunk_count += 1
+            print(f"[STREAM] Step 5.{chunk_count}: Received chunk #{chunk_count}")
+            print(f"[STREAM]   - Type: {type(chunk).__name__}")
+            print(f"[STREAM]   - Node: {metadata.get('langgraph_node', 'unknown')}")
+            
             node = metadata.get("langgraph_node", "")
 
             # ── Tool call being assembled (AIMessageChunk) ─────────────────
@@ -564,18 +600,40 @@ def stream_chat(user_prompt: str):
 
     except Exception as e:
         error_msg = str(e)
-        print(f"[ERROR] Stream failed: {error_msg}\n{traceback.format_exc()}")
-        ai_placeholder.error(
-            f"⚠️ **Error**: {error_msg}\n\n"
-            "**Possible causes:**\n"
-            "- API keys not set in Render environment\n"
-            "- Network error connecting to AI service\n"
-            "- Invalid API credentials\n\n"
-            "Check Render logs for more details."
-        )
+        full_traceback = traceback.format_exc()
+        print(f"\n[ERROR] Stream failed!")
+        print(f"[ERROR] Error type: {type(e).__name__}")
+        print(f"[ERROR] Error message: {error_msg}")
+        print(f"[ERROR] Full traceback:\n{full_traceback}")
+        
+        # Check if it's an API key issue
+        if "API" in str(e) or "key" in str(e).lower() or "401" in str(e) or "403" in str(e):
+            ai_placeholder.error(
+                "🔑 **API Key Error**\n\n"
+                "Your API keys might be missing or invalid.\n\n"
+                "**On Render, did you add these to Environment Variables?**\n"
+                "- GROQ_API_KEY\n"
+                "- SERPAPI_API_KEY\n\n"
+                "Check Render Logs for details."
+            )
+        else:
+            ai_placeholder.error(
+                f"⚠️ **Error**: {error_msg}\n\n"
+                "**Check Render logs for details:**\n"
+                f"Error type: {type(e).__name__}\n\n"
+                "**Possible causes:**\n"
+                "- API keys not set in Render Environment Variables\n"
+                "- Network error connecting to AI service\n"
+                "- Backend configuration issue"
+            )
         return
 
+    print(f"[STREAM] Streaming complete! Received {chunk_count} total chunks")
+    print(f"[STREAM] Full text length: {len(full_text)} characters")
+    print(f"[STREAM] Full text: {full_text[:100]}...")
+
     # ── Final AI message ─────────────────────────────────────────────────────
+    print("[STREAM] Displaying final message...")
     if full_text:
         ai_placeholder.markdown(f"""
         <div class="msg-ai">
@@ -608,6 +666,9 @@ def stream_chat(user_prompt: str):
         history.append({"role": "assistant", "content": full_text})
 
     tool_placeholder.empty()
+    
+    print(f"[STREAM] ✓ stream_chat() completed successfully!")
+    print(f"[STREAM] Final history size: {len(history)} messages\n")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -832,5 +893,8 @@ st.markdown(_CHAT_BAR_CSS, unsafe_allow_html=True)
 prompt = st.chat_input("Message the agent…  (search · image · stock · YouTube · maths)")
 
 if prompt:
+    print(f"\n[MAIN] User entered prompt: {prompt}")
+    print(f"[MAIN] Calling stream_chat()...")
     stream_chat(prompt.strip())
+    print(f"[MAIN] stream_chat() returned, calling st.rerun()...")
     st.rerun()
