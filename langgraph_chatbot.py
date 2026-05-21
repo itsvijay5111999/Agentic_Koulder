@@ -185,7 +185,9 @@ def calculator(first_num: float, second_num: float, operation: str) -> dict:
 @tool
 def get_stock_price(symbol: str) -> dict:
     """Fetch latest stock price for a given symbol using Alpha Vantage API"""
-    api_key = os.getenv("ALPHA_VANTAGE_API_KEY", "demo") 
+    api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
+    if not api_key:
+        return {"error": "ALPHA_VANTAGE_API_KEY not set"}
     url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={api_key}"
     r = requests.get(url)
     return r.json()

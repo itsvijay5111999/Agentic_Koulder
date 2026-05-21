@@ -789,10 +789,10 @@ if not history:
     suggestions = [
         ("🔍", "Search latest AI news"),
         ("▶️", "Find Python tutorials on YouTube"),
-        ("🎨", "Generate a futuristic city image"),
         ("📈", "What's Apple's stock price?"),
         ("🧮", "Calculate 1234 × 5678"),
         ("🌐", "Search for LangGraph tutorials"),
+        ("💡", "Explain quantum computing"),
     ]
 
     # Inject button style override once
