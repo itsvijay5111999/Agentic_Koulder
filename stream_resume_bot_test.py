@@ -11,6 +11,8 @@ import json
 import base64
 import uuid
 import time
+import traceback
+import os
 from datetime import datetime
 from io import BytesIO
 from PIL import Image
@@ -21,11 +23,23 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, AIMess
 # ─── Backend import ───────────────────────────────────────────────────────────
 # Adjust the import path / module name if your backend file is named differently.
 try:
-    from backend import chatbot, retrieve_all_threads, get_latest_news
+    from backend import chatbot, retrieve_all_threads
+    try:
+        from backend import get_latest_news
+    except ImportError:
+        # Fallback if get_latest_news not available
+        def get_latest_news():
+            return []
 except ImportError as e:
     st.error(
         f"❌ Could not import backend: {e}\n\n"
-        "Make sure **backend.py** is in the same directory as this file."
+        "**Make sure backend.py is in the same directory.**\n\n"
+        "**If on Render, verify these environment variables are set:**\n"
+        "- GROQ_API_KEY\n"
+        "- SERPAPI_API_KEY\n"
+        "- YOUTUBE_API_KEY (optional)\n"
+        "- TAVILY_API_KEY (optional)\n\n"
+        "Check Render logs for detailed errors."
     )
     st.stop()
 
@@ -549,7 +563,16 @@ def stream_chat(user_prompt: str):
                     </div>""", unsafe_allow_html=True)
 
     except Exception as e:
-        ai_placeholder.error(f"Streaming error: {e}")
+        error_msg = str(e)
+        print(f"[ERROR] Stream failed: {error_msg}\n{traceback.format_exc()}")
+        ai_placeholder.error(
+            f"⚠️ **Error**: {error_msg}\n\n"
+            "**Possible causes:**\n"
+            "- API keys not set in Render environment\n"
+            "- Network error connecting to AI service\n"
+            "- Invalid API credentials\n\n"
+            "Check Render logs for more details."
+        )
         return
 
     # ── Final AI message ─────────────────────────────────────────────────────
