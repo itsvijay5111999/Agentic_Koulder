@@ -225,18 +225,6 @@ h1,h2,h3 { font-family: 'Space Mono', monospace; }
 .yt-title { font-size: 0.85rem; color: var(--text); font-weight: 500; line-height: 1.4; }
 .yt-link  { font-size: 0.75rem; color: var(--accent2); text-decoration: none; }
 
-/* ── Stock card ── */
-.stock-card {
-    background: linear-gradient(135deg, #1a1f2e 0%, #12161f 100%);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 18px 22px;
-    margin: 8px 0;
-}
-.stock-symbol { font-family: 'Space Mono', monospace; font-size: 1.4rem; color: var(--accent2); }
-.stock-price  { font-family: 'Space Mono', monospace; font-size: 2rem; font-weight: 700; color: var(--text); }
-.stock-change { font-size: 0.85rem; margin-top: 4px; }
-
 /* ── News card ── */
 .news-item {
     border-bottom: 1px solid var(--border);
@@ -349,7 +337,6 @@ TOOL_META = {
     "search_youtube_videos":      {"icon": "▶️",  "label": "YouTube Search",  "color": "#ff0000"},
     "generate_stability_image":   {"icon": "🎨",  "label": "Image Generator", "color": "#ec4899"},
     "SerpAPI_Search":             {"icon": "🌐",  "label": "SerpAPI Search",  "color": "#00e5ff"},
-    "get_stock_price":            {"icon": "📈",  "label": "Stock Lookup",    "color": "#1db954"},
     "calculator":                 {"icon": "🧮",  "label": "Calculator",      "color": "#f59e0b"},
     "DuckDuckGoSearch":           {"icon": "🦆",  "label": "DuckDuckGo",      "color": "#de5833"},
     "web_search":                 {"icon": "🌐",  "label": "Web Search",      "color": "#00e5ff"},
@@ -385,34 +372,6 @@ def render_youtube_results(data_str: str):
         st.text(data_str)
 
 
-def render_stock_data(data_str: str):
-    """Render stock price card."""
-    try:
-        d = json.loads(data_str) if isinstance(data_str, str) else data_str
-        gq = d.get("Global Quote", {})
-        if gq:
-            symbol  = gq.get("01. symbol", "N/A")
-            price   = gq.get("05. price", "0")
-            change  = gq.get("09. change", "0")
-            pct     = gq.get("10. change percent", "0%")
-            volume  = gq.get("06. volume", "N/A")
-            is_pos  = float(change) >= 0
-
-            change_color = "#1db954" if is_pos else "#ef4444"
-            arrow = "▲" if is_pos else "▼"
-            st.markdown(f"""
-            <div class="stock-card">
-                <div class="stock-symbol">{symbol}</div>
-                <div class="stock-price">${float(price):.2f}</div>
-                <div class="stock-change" style="color:{change_color}">
-                    {arrow} {change} ({pct}) &nbsp;·&nbsp; Vol: {int(volume):,}
-                </div>
-            </div>""", unsafe_allow_html=True)
-        else:
-            st.json(d)
-    except Exception:
-        st.text(str(data_str))
-
 
 def render_image(data_str: str):
     """Render a base64 generated image."""
@@ -435,8 +394,6 @@ def render_tool_result(tool_name: str, content: str):
     tl = tool_name.lower()
     if "youtube" in tl:
         render_youtube_results(content)
-    elif "stock" in tl:
-        render_stock_data(content)
     elif "image" in tl or "stability" in tl:
         render_image(content)
     else:
@@ -789,9 +746,9 @@ if not history:
     suggestions = [
         ("🔍", "Search latest AI news"),
         ("▶️", "Find Python tutorials on YouTube"),
-        ("📈", "What's Apple's stock price?"),
         ("🧮", "Calculate 1234 × 5678"),
         ("🌐", "Search for LangGraph tutorials"),
+        ("📊", "What is machine learning?"),
         ("💡", "Explain quantum computing"),
     ]
 
