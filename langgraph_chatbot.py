@@ -216,7 +216,23 @@ def chat_node(state: ChatState) -> dict:
 tool_node = ToolNode(tools)
 
 # SQLite checkpointer for persistence
+# SQLite checkpointer for persistence
 conn = sqlite3.connect(database='chatbot.db3', check_same_thread=False)
+
+# Create cursor
+cursor = conn.cursor()
+
+# Create checkpoints table if it does not exist
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS checkpoints (
+    thread_id TEXT
+)
+""")
+
+# Save changes
+conn.commit()
+
+# Initialize LangGraph checkpointer
 checkpointer = SqliteSaver(conn=conn)
 
 
