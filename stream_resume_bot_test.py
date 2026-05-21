@@ -323,10 +323,8 @@ def init_state():
     if "thread_id" not in st.session_state:
         st.session_state.thread_id = str(uuid.uuid4())
     if "threads" not in st.session_state:
-        existing = [t[0] for t in retrieve_all_threads()]
-        st.session_state.threads = existing if existing else [st.session_state.thread_id]
-        if st.session_state.thread_id not in st.session_state.threads:
-            st.session_state.threads.insert(0, st.session_state.thread_id)
+        # Only show current thread, no history
+        st.session_state.threads = [st.session_state.thread_id]
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = {}          # {thread_id: [msg_dicts]}
     if "streaming" not in st.session_state:
@@ -707,57 +705,20 @@ with st.sidebar:
 
     st.markdown("<div style='height:6px'/>", unsafe_allow_html=True)
 
-    # Show threads list
-    all_threads = st.session_state.threads
-    for t in all_threads[:15]:                        # cap at 15 for readability
-        label     = f"💬 {t[:8]}…"
-        is_active = t == tid
-        btn_type  = "primary" if is_active else "secondary"
-        if st.button(label, key=f"thread_{t}", use_container_width=True, type=btn_type):
-            st.session_state.thread_id = t
-            if t not in st.session_state.chat_history:
-                st.session_state.chat_history[t] = []
-            st.rerun()
+    # Show current thread info
+    st.markdown(f"""
+    <div style="padding:8px 12px;background:#242836;border-radius:8px;
+                font-size:.85rem;color:#9ca3af;text-align:center">
+        Current: <span style="color:#6c63ff">{tid[:8]}…</span>
+    </div>""", unsafe_allow_html=True)
 
     st.divider()
 
-    # ── Tool Palette ──────────────────────────────────────────────────────────
-    st.markdown('<div class="sidebar-title">🛠️ Available Tools</div>', unsafe_allow_html=True)
-    tools_info = [
-        ("🔍", "Tavily Search",    "AI-optimised deep search"),
-        ("🌐", "SerpAPI Search",   "Real-time web results"),
-        ("▶️", "YouTube Search",   "Video discovery"),
-        ("🎨", "Image Generator",  "SDXL text-to-image"),
-        ("📈", "Stock Lookup",     "Live market prices"),
-        ("🧮", "Calculator",       "Basic arithmetic"),
-    ]
-    for icon, name, desc in tools_info:
-        st.markdown(f"""
-        <div style="display:flex;align-items:center;gap:10px;
-                    padding:7px 0;border-bottom:1px solid #242836;">
-            <span style="font-size:1.1rem">{icon}</span>
-            <div>
-                <div style="font-size:.82rem;font-weight:500;color:#e8eaf6">{name}</div>
-                <div style="font-size:.72rem;color:#6b7280">{desc}</div>
-            </div>
-        </div>""", unsafe_allow_html=True)
-
-    st.divider()
-
-    # ── Latest News ───────────────────────────────────────────────────────────
-    st.markdown('<div class="sidebar-title">📰 Latest News</div>', unsafe_allow_html=True)
-    if st.button("🔄 Refresh News", use_container_width=True):
-        with st.spinner("Fetching headlines…"):
-            st.session_state.news = get_latest_news()
-
-    if not st.session_state.news:
-        st.caption("Click 'Refresh News' to load top headlines.")
-    else:
-        for title, url in st.session_state.news[:8]:
-            st.markdown(f"""
-            <div class="news-item">
-                <a href="{url}" target="_blank">{title}</a>
-            </div>""", unsafe_allow_html=True)
+    # Footer
+    st.markdown("""
+    <div style="text-align:center;padding:12px 0;font-size:.75rem;color:#6b7280">
+        🚀 Powered by LangGraph + Groq
+    </div>""", unsafe_allow_html=True)
 
     st.divider()
 
