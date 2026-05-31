@@ -1,3 +1,17 @@
-from langgraph_chatbot import chatbot, retrieve_all_threads, get_latest_news
+from langgraph_chatbot import (
+    call_deep_agent,
+    chatbot,
+    get_latest_news,
+    requires_deep_research,
+    retrieve_all_threads,
+    test_deep_agent_connection,
+)
 
-__all__ = ["chatbot", "retrieve_all_threads", "get_latest_news"]
+__all__ = [
+    "call_deep_agent",
+    "chatbot",
+    "get_latest_news",
+    "requires_deep_research",
+    "retrieve_all_threads",
+    "test_deep_agent_connection",
+]

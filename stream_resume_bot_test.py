@@ -1,818 +1,1729 @@
 """
-Agentic AI Chatbot — Streamlit Frontend
-========================================
-Place this file in the SAME directory as your backend file (backend.py).
-Run with: streamlit run streamlit_app.py
+Responsive Streamlit frontend for the agentic chatbot.
+
+Run with:
+    streamlit run stream_resume_bot_test.py
 """
 
-print("\n" + "="*60)
-print("🚀 STARTING AGENTIC AI CHATBOT")
-print("="*60)
-
-import streamlit as st
-import json
 import base64
-import uuid
+import html
+import json
+import os
 import time
 import traceback
-import os
-from datetime import datetime
+import uuid
 from io import BytesIO
+
+import streamlit as st
+from langchain_core.messages import HumanMessage, ToolMessage
 from PIL import Image
 
-print(f"[INIT] Python version: {os.sys.version}")
-print(f"[INIT] Working directory: {os.getcwd()}")
-print(f"[INIT] Files in directory: {os.listdir('.')[:10]}")  # List first 10 files
 
-# ─── LangChain / LangGraph imports ───────────────────────────────────────────
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, AIMessageChunk
+APP_DEBUG = os.getenv("STREAMLIT_APP_DEBUG", "").lower() in {"1", "true", "yes", "on"}
 
-print("\n[INIT] Checking environment variables...")
-print(f"[INIT] GROQ_API_KEY set: {'✓' if os.getenv('GROQ_API_KEY') else '✗ MISSING'}")
-print(f"[INIT] SERPAPI_API_KEY set: {'✓' if os.getenv('SERPAPI_API_KEY') else '✗ MISSING'}")
-print(f"[INIT] YOUTUBE_API_KEY set: {'✓' if os.getenv('YOUTUBE_API_KEY') else '⚠ OPTIONAL'}")
-print(f"[INIT] TAVILY_API_KEY set: {'✓' if os.getenv('TAVILY_API_KEY') else '⚠ OPTIONAL'}")
-print()
 
-# ─── Backend import ───────────────────────────────────────────────────────────
-# Adjust the import path / module name if your backend file is named differently.
-print("[INIT] Starting imports...")
-try:
-    print("[INIT] Importing backend.chatbot...")
-    from backend import chatbot, retrieve_all_threads
-    print("[INIT] ✓ Successfully imported chatbot")
-    try:
-        from backend import get_latest_news
-        print("[INIT] ✓ Successfully imported get_latest_news")
-    except ImportError:
-        # Fallback if get_latest_news not available
-        print("[INIT] ⚠ get_latest_news not found, using fallback")
-        def get_latest_news():
-            return []
-except ImportError as e:
-    print(f"[INIT] ✗ Import failed: {e}")
-    print(f"[INIT] Full error: {traceback.format_exc()}")
-    st.error(
-        f"❌ Could not import backend: {e}\n\n"
-        "**Make sure backend.py is in the same directory.**\n\n"
-        "**If on Render, verify these environment variables are set:**\n"
-        "- GROQ_API_KEY\n"
-        "- SERPAPI_API_KEY\n"
-        "- YOUTUBE_API_KEY (optional)\n"
-        "- TAVILY_API_KEY (optional)\n\n"
-        "**Check Render logs for:**\n"
-        f"Error: {e}"
-    )
-    st.stop()
+def debug_log(message: str) -> None:
+    """Log only when explicitly enabled; avoids leaking prompts, paths, and env info."""
+    if APP_DEBUG:
+        print(f"[streamlit-ui] {message}")
 
-print("[INIT] ✓ All imports successful")
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# PAGE CONFIG & GLOBAL CSS
-# ═══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(
     page_title="Agentic AI",
-    page_icon="⚡",
+    page_icon="A",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.markdown("""
+
+try:
+    from backend import chatbot, requires_deep_research, test_deep_agent_connection
+except Exception as exc:
+    debug_log(traceback.format_exc())
+    st.error("Backend is unavailable. Check backend.py, dependencies, required environment variables, and deployment logs.")
+    if APP_DEBUG:
+        st.caption(f"Backend startup error: {type(exc).__name__}: {exc}")
+    st.stop()
+
+
+st.markdown(
+    """
 <style>
-/* ── Google Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
-
-/* ── Root Variables ── */
 :root {
-    --bg:        #0d0f14;
-    --surface:   #161923;
-    --border:    #242836;
-    --accent:    #6c63ff;
-    --accent2:   #00e5ff;
-    --success:   #1db954;
-    --warn:      #f59e0b;
-    --danger:    #ef4444;
-    --text:      #e8eaf6;
-    --muted:     #6b7280;
-    --user-bg:   #1e2235;
-    --ai-bg:     #151923;
-    --radius:    12px;
-    --shadow:    0 4px 24px rgba(0,0,0,.5);
+    color-scheme: dark;
+    --app-bg: #05060a;
+    --panel: #11131a;
+    --panel-soft: #181b24;
+    --ink: #f8fafc;
+    --muted: #cbd5e1;
+    --muted-soft: #94a3b8;
+    --line: #2d3340;
+    --line-strong: #465162;
+    --sidebar: #07080d;
+    --sidebar-panel: #12151d;
+    --sidebar-line: #303746;
+    --green: #4ade80;
+    --teal: #2dd4bf;
+    --indigo: #a78bfa;
+    --amber: #fbbf24;
+    --coral: #fb7185;
+    --danger-bg: #3b1118;
+    --warning-bg: #35260a;
+    --success-bg: #0f2f1b;
+    --text-on-light: #0f172a;
+    --shadow: 0 20px 56px rgba(0, 0, 0, 0.45);
+    --radius: 8px;
 }
 
-/* ── App Background ── */
-.stApp { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; }
-section[data-testid="stSidebar"] { background: var(--surface) !important; border-right: 1px solid var(--border); }
+.stApp {
+    background:
+        radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.11), transparent 28%),
+        radial-gradient(circle at 86% 12%, rgba(255, 255, 255, 0.07), transparent 30%),
+        linear-gradient(145deg, #05060a 0%, #0d1018 48%, #171b24 100%),
+        var(--app-bg);
+    color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
 
-/* ── Hide default streamlit chrome ── */
 #MainMenu, footer, header { visibility: hidden; }
-.block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; }
 
-/* ── Typography ── */
-h1,h2,h3 { font-family: 'Space Mono', monospace; }
+.stApp,
+.stApp p,
+.stApp label {
+    color: var(--ink);
+}
 
-/* ── Chat message containers ── */
-.msg-user {
-    background: var(--user-bg);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--accent);
-    border-radius: var(--radius);
-    padding: 14px 18px;
-    margin: 10px 0;
-    font-size: 0.95rem;
-    line-height: 1.6;
+.stApp a {
+    color: var(--teal) !important;
 }
-.msg-ai {
-    background: var(--ai-bg);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--accent2);
-    border-radius: var(--radius);
-    padding: 14px 18px;
-    margin: 10px 0;
-    font-size: 0.95rem;
-    line-height: 1.6;
+
+.stApp a:hover {
+    color: #67e8f9 !important;
 }
-.msg-label {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.08em;
+
+.block-container {
+    max-width: 1180px;
+    padding: 1.25rem 1.6rem 6rem !important;
+}
+
+section[data-testid="stSidebar"] {
+    background: var(--sidebar) !important;
+    border-right: 1px solid var(--sidebar-line);
+}
+
+section[data-testid="stSidebar"] * {
+    color: #f2f2f2;
+}
+
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] span,
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+    color: var(--ink) !important;
+}
+
+section[data-testid="stSidebar"] [data-testid="stMetric"] {
+    background: var(--sidebar-panel);
+    border: 1px solid var(--sidebar-line);
+    border-radius: var(--radius);
+    padding: 0.8rem;
+}
+
+section[data-testid="stSidebar"] [data-testid="stMetricLabel"] p,
+section[data-testid="stSidebar"] [data-testid="stMetricValue"] {
+    color: #f2f2f2 !important;
+}
+
+.app-shell {
+    display: grid;
+    gap: 1rem;
+}
+
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: rgba(13, 13, 15, 0.78);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 0.85rem 1rem;
+    backdrop-filter: blur(18px);
+}
+
+.brand-lockup {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.brand-mark {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius);
+    display: grid;
+    place-items: center;
+    background: #ffffff;
+    color: var(--text-on-light) !important;
+    font-weight: 800;
+    letter-spacing: 0;
+}
+
+.brand-title {
+    font-size: clamp(1rem, 2vw, 1.25rem);
+    line-height: 1.2;
+    font-weight: 760;
+    letter-spacing: 0;
+    color: var(--ink);
+}
+
+.brand-subtitle {
+    margin-top: 0.14rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.status-pill,
+.thread-pill {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel);
+    color: var(--muted);
+    font-size: 0.76rem;
+    line-height: 1;
+    padding: 0.45rem 0.65rem;
+    white-space: nowrap;
+}
+
+.status-pill strong {
+    color: var(--green);
+}
+
+.deep-agent-pill {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background:
+        linear-gradient(var(--panel), var(--panel)) padding-box,
+        linear-gradient(120deg, #4285f4, #a142f4, #ea4335, #fbbc04, #34a853, #00acc1, #4285f4) border-box;
+    background-size: 100% 100%, 300% 300%;
+    color: var(--ink) !important;
+    font-size: 0.76rem;
+    font-weight: 720;
+    line-height: 1;
+    padding: 0.45rem 0.72rem;
+    white-space: nowrap;
+    box-shadow: 0 8px 24px rgba(66, 133, 244, 0.14);
+    animation: deepAgentBorderFlow 4.8s linear infinite;
+}
+
+.deep-agent-pill span {
+    color: inherit !important;
+}
+
+.deep-agent-spark {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #4285f4, #a142f4, #ea4335, #fbbc04, #34a853, #00acc1);
+    background-size: 260% 260%;
+    box-shadow: 0 0 14px rgba(45, 212, 191, 0.72);
+    flex: 0 0 auto;
+    animation:
+        deepAgentGlow 1.8s ease-in-out infinite,
+        deepAgentBorderFlow 3.6s linear infinite;
+}
+
+.deep-agent-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background:
+        linear-gradient(var(--sidebar-panel), var(--sidebar-panel)) padding-box,
+        linear-gradient(135deg, #4285f4, #a142f4, #ea4335, #fbbc04, #34a853, #00acc1, #4285f4) border-box;
+    background-size: 100% 100%, 320% 320%;
+    padding: 0.85rem;
+    margin: 0.2rem 0 0.75rem;
+    box-shadow: 0 12px 30px rgba(66, 133, 244, 0.12);
+    animation: deepAgentBorderFlow 5.4s linear infinite;
+}
+
+.deep-agent-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: linear-gradient(90deg, #4285f4, #a142f4, #ea4335, #fbbc04, #34a853, #00acc1);
+    background-size: 280% 100%;
+    animation: deepAgentBorderFlow 3.8s linear infinite;
+}
+
+.deep-agent-card-title {
+    color: var(--ink) !important;
+    font-size: 0.9rem;
+    font-weight: 780;
+    line-height: 1.25;
+}
+
+.deep-agent-card-detail {
+    color: var(--muted) !important;
+    font-size: 0.76rem;
+    line-height: 1.45;
+    margin-top: 0.22rem;
+}
+
+.deep-agent-card-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--green) !important;
+    font-size: 0.72rem;
+    font-weight: 760;
+    margin-top: 0.65rem;
     text-transform: uppercase;
-    margin-bottom: 8px;
-    opacity: 0.6;
+    letter-spacing: 0.08em;
 }
-.msg-user .msg-label  { color: var(--accent); }
-.msg-ai   .msg-label  { color: var(--accent2); }
 
-/* ── Tool indicator cards ── */
+@keyframes deepAgentGlow {
+    0%, 100% { opacity: 0.72; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.18); }
+}
+
+@keyframes deepAgentBorderFlow {
+    0% { background-position: 0% 50%, 0% 50%; }
+    100% { background-position: 0% 50%, 300% 50%; }
+}
+
+.hero-panel {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    padding: clamp(1.2rem, 4vw, 2.2rem);
+    margin-top: 1rem;
+}
+
+.hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(240px, 0.7fr);
+    gap: 1.2rem;
+    align-items: stretch;
+}
+
+.hero-title {
+    font-size: clamp(1.65rem, 4vw, 3rem);
+    line-height: 1.02;
+    max-width: 740px;
+    font-weight: 820;
+    letter-spacing: 0;
+    color: var(--ink);
+}
+
+.hero-copy {
+    color: var(--muted);
+    margin-top: 0.85rem;
+    font-size: clamp(0.95rem, 1.6vw, 1.05rem);
+    line-height: 1.6;
+    max-width: 620px;
+}
+
+.signal-panel {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel-soft);
+    padding: 1rem;
+    display: grid;
+    align-content: space-between;
+    gap: 1rem;
+}
+
+.signal-title {
+    color: var(--ink);
+    font-weight: 720;
+    font-size: 0.92rem;
+}
+
+.signal-list {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.signal-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+.signal-dot {
+    width: 0.58rem;
+    height: 0.58rem;
+    border-radius: 50%;
+    background: var(--green);
+    flex: 0 0 auto;
+}
+
+.signal-dot.teal { background: var(--teal); }
+.signal-dot.amber { background: var(--amber); }
+.signal-dot.coral { background: var(--coral); }
+
+.suggestion-wrap {
+    margin-top: 1rem;
+}
+
+.section-kicker {
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 0.4rem 0 0.7rem;
+}
+
+.sidebar-brand {
+    display: grid;
+    gap: 0.65rem;
+    padding: 1rem 0 0.6rem;
+}
+
+.sidebar-mark {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: var(--radius);
+    display: grid;
+    place-items: center;
+    background: #ffffff;
+    color: var(--text-on-light) !important;
+    font-weight: 850;
+    letter-spacing: 0;
+}
+
+.sidebar-title {
+    color: #ffffff;
+    font-weight: 760;
+    font-size: 1rem;
+}
+
+.sidebar-note {
+    color: var(--muted) !important;
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.sidebar-section-title {
+    color: var(--muted) !important;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 0.65rem 0 0.55rem;
+}
+
+.current-thread {
+    border: 1px solid var(--sidebar-line);
+    border-radius: var(--radius);
+    background: var(--sidebar-panel);
+    color: var(--muted) !important;
+    font-size: 0.78rem;
+    padding: 0.7rem 0.75rem;
+    overflow-wrap: anywhere;
+}
+
 .tool-card {
     display: flex;
     align-items: center;
-    gap: 10px;
-    background: #1a1f2e;
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--warn);
-    border-radius: 8px;
-    padding: 10px 14px;
-    margin: 6px 0;
-    font-family: 'Space Mono', monospace;
-    font-size: 0.78rem;
-    color: var(--warn);
-    animation: pulse 1.5s ease-in-out infinite;
-}
-.tool-card.done {
-    border-left-color: var(--success);
-    color: var(--success);
-    animation: none;
-}
-@keyframes pulse {
-    0%,100% { opacity: 1; }
-    50%      { opacity: 0.55; }
-}
-
-/* ── Spinner dot ── */
-.dot-spin {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    background: var(--warn);
-    display: inline-block;
-    animation: dotpulse .8s ease-in-out infinite;
-}
-.dot-done { background: var(--success) !important; animation: none !important; }
-@keyframes dotpulse {
-    0%,100% { transform: scale(1); opacity:1; }
-    50%      { transform: scale(1.5); opacity:.6; }
-}
-
-/* ── Sidebar widgets ── */
-.sidebar-section {
-    background: #1a1f2e;
-    border: 1px solid var(--border);
+    gap: 0.72rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
     border-radius: var(--radius);
-    padding: 14px;
-    margin-bottom: 14px;
+    padding: 0.72rem 0.85rem;
+    margin: 0.5rem 0;
+    box-shadow: 0 8px 24px rgba(23, 25, 31, 0.05);
 }
-.sidebar-title {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+
+.tool-chip {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: var(--green);
+    color: var(--text-on-light) !important;
+    font-weight: 800;
+    font-size: 0.72rem;
+}
+
+.tool-card.running .tool-chip {
+    background: var(--amber);
+    color: var(--text-on-light) !important;
+}
+
+.tool-label {
+    color: var(--ink);
+    font-weight: 680;
+    font-size: 0.9rem;
+}
+
+.tool-state {
+    margin-left: auto;
     color: var(--muted);
-    margin-bottom: 10px;
+    font-size: 0.76rem;
 }
 
-/* ── Thread pill buttons ── */
-.stButton > button {
-    border-radius: 8px !important;
-    font-family: 'DM Sans', sans-serif !important;
-    font-size: 0.85rem !important;
-    transition: all .2s ease !important;
-}
-
-/* ── YouTube card ── */
 .yt-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 136px minmax(0, 1fr);
+    gap: 0.85rem;
+    border: 1px solid var(--line);
     border-radius: var(--radius);
-    overflow: hidden;
-    margin: 8px 0;
-    display: flex;
-    gap: 12px;
-    padding: 10px;
-    transition: border-color .2s;
+    background: var(--panel);
+    padding: 0.65rem;
+    margin: 0.55rem 0;
 }
-.yt-card:hover { border-color: var(--accent2); }
-.yt-thumb { border-radius: 6px; width: 120px; height: 68px; object-fit: cover; }
-.yt-title { font-size: 0.85rem; color: var(--text); font-weight: 500; line-height: 1.4; }
-.yt-link  { font-size: 0.75rem; color: var(--accent2); text-decoration: none; }
 
-/* ── News card ── */
-.news-item {
-    border-bottom: 1px solid var(--border);
-    padding: 8px 0;
+.yt-thumb {
+    width: 136px;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 6px;
+    background: var(--panel-soft);
+}
+
+.yt-title {
+    color: var(--ink);
+    font-weight: 680;
+    font-size: 0.92rem;
+    line-height: 1.35;
+}
+
+.yt-link {
+    display: inline-block;
+    color: var(--teal);
     font-size: 0.82rem;
-    line-height: 1.4;
+    margin-top: 0.45rem;
+    text-decoration: none;
+    font-weight: 680;
 }
-.news-item a { color: var(--accent2); text-decoration: none; }
-.news-item a:hover { color: var(--accent); }
 
-/* ── Chat input bottom bar — full dark override ── */
-/* Outer fixed bar Streamlit wraps the input in */
+.image-frame {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    padding: 0.35rem;
+    margin: 0.65rem 0;
+}
+
+.agent-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(13, 13, 15, 0.88);
+    box-shadow: 0 10px 28px rgba(23, 25, 31, 0.06);
+    padding: 0.85rem 0.95rem;
+    margin: 0.65rem 0;
+}
+
+.agent-spinner {
+    width: 1.45rem;
+    height: 1.45rem;
+    border-radius: 50%;
+    border: 3px solid var(--line-strong);
+    border-top-color: var(--indigo);
+    border-right-color: var(--teal);
+    animation: agentSpin 0.78s linear infinite;
+    flex: 0 0 auto;
+}
+
+.agent-progress-copy {
+    min-width: 0;
+}
+
+.agent-progress-phase {
+    color: var(--ink);
+    font-weight: 760;
+    font-size: 0.92rem;
+    line-height: 1.25;
+}
+
+.agent-progress-detail {
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    margin-top: 0.12rem;
+}
+
+.phase-steps {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+
+.phase-step {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--line-strong);
+}
+
+.phase-step.active {
+    background: var(--indigo);
+}
+
+@keyframes agentSpin {
+    to { transform: rotate(360deg); }
+}
+
+.notice-card {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(13, 13, 15, 0.92);
+    box-shadow: 0 14px 34px rgba(23, 25, 31, 0.07);
+    padding: 0.95rem 1rem;
+    margin: 0.65rem 0;
+}
+
+.notice-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: var(--indigo);
+}
+
+.notice-card::after {
+    content: "";
+    position: absolute;
+    inset: -40% auto auto -12%;
+    width: 9rem;
+    height: 9rem;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.06);
+    animation: noticeBreathe 2.4s ease-in-out infinite;
+}
+
+.notice-card.notice-success::before { background: var(--green); }
+.notice-card.notice-success::after { background: rgba(0, 0, 0, 0.05); }
+.notice-card.notice-warning::before { background: var(--amber); }
+.notice-card.notice-warning::after { background: rgba(0, 0, 0, 0.07); }
+.notice-card.notice-token::before { background: var(--coral); }
+.notice-card.notice-token::after { background: rgba(0, 0, 0, 0.08); }
+.notice-card.notice-error::before { background: var(--coral); }
+.notice-card.notice-error::after { background: rgba(0, 0, 0, 0.08); }
+
+.notice-orb {
+    position: relative;
+    z-index: 1;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: #ffffff;
+    color: var(--text-on-light) !important;
+    font-weight: 850;
+    flex: 0 0 auto;
+    animation: noticePulse 1.8s ease-in-out infinite;
+}
+
+.notice-copy {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+}
+
+.notice-title {
+    color: var(--ink);
+    font-weight: 790;
+    line-height: 1.25;
+}
+
+.notice-detail {
+    color: var(--muted);
+    font-size: 0.86rem;
+    line-height: 1.55;
+    margin-top: 0.24rem;
+}
+
+section[data-testid="stSidebar"] .notice-card {
+    background: var(--sidebar-panel);
+    border-color: var(--sidebar-line);
+    box-shadow: none;
+}
+
+section[data-testid="stSidebar"] .notice-title {
+    color: #f2f2f2;
+}
+
+section[data-testid="stSidebar"] .notice-detail {
+    color: var(--muted);
+}
+
+@keyframes noticePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.06); }
+}
+
+@keyframes noticeBreathe {
+    0%, 100% { opacity: 0.55; transform: scale(1); }
+    50% { opacity: 0.9; transform: scale(1.08); }
+}
+
+[data-testid="stChatMessage"] {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(13, 13, 15, 0.88);
+    box-shadow: 0 10px 28px rgba(23, 25, 31, 0.06);
+    padding: 0.72rem;
+}
+
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {
+    line-height: 1.62;
+}
+
+[data-testid="stMarkdownContainer"],
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] h1,
+[data-testid="stMarkdownContainer"] h2,
+[data-testid="stMarkdownContainer"] h3,
+[data-testid="stMarkdownContainer"] h4,
+[data-testid="stMarkdownContainer"] code,
+[data-testid="stCaptionContainer"],
+[data-testid="stCaptionContainer"] p,
+[data-testid="stText"] {
+    color: var(--ink) !important;
+}
+
+[data-testid="stMarkdownContainer"] blockquote,
+[data-testid="stMarkdownContainer"] blockquote p {
+    color: var(--muted) !important;
+    border-left-color: var(--indigo) !important;
+}
+
+[data-testid="stMarkdownContainer"] code,
+[data-testid="stCodeBlock"] {
+    background: #05060a !important;
+    color: #fef3c7 !important;
+    border-color: var(--line) !important;
+}
+
+.stJson,
+[data-testid="stJson"] {
+    color: var(--ink) !important;
+}
+
+.stJson pre,
+[data-testid="stJson"] pre,
+[data-testid="stJson"] span,
+[data-testid="stJson"] div {
+    color: var(--ink) !important;
+}
+
+[data-testid="stAlert"] {
+    color: var(--ink) !important;
+}
+
+[data-testid="stAlert"] p,
+[data-testid="stAlert"] span,
+[data-testid="stAlert"] div {
+    color: var(--ink) !important;
+}
+
+[data-testid="stExpander"] {
+    background: var(--panel) !important;
+    border-color: var(--line) !important;
+}
+
+[data-testid="stExpander"] summary,
+[data-testid="stExpander"] p,
+[data-testid="stExpander"] span {
+    color: var(--ink) !important;
+}
+
+.stTextInput input,
+.stTextArea textarea,
+.stSelectbox div,
+.stMultiSelect div,
+.stNumberInput input {
+    background: var(--panel) !important;
+    color: var(--ink) !important;
+    border-color: var(--line-strong) !important;
+}
+
+.stButton > button {
+    border-radius: var(--radius) !important;
+    border: 1px solid var(--line-strong) !important;
+    background: var(--panel) !important;
+    color: var(--ink) !important;
+    min-height: 2.7rem;
+    font-weight: 680 !important;
+    transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease !important;
+    white-space: normal !important;
+}
+
+.stButton > button:hover {
+    border-color: var(--indigo) !important;
+    box-shadow: 0 10px 26px rgba(255, 255, 255, 0.08) !important;
+    transform: translateY(-1px);
+}
+
+section[data-testid="stSidebar"] .stButton > button {
+    background: var(--sidebar-panel) !important;
+    border-color: var(--sidebar-line) !important;
+    color: #f2f2f2 !important;
+}
+
+section[data-testid="stSidebar"] .stButton > button *,
+section[data-testid="stSidebar"] .stButton > button p,
+section[data-testid="stSidebar"] .stButton > button span {
+    color: inherit !important;
+}
+
+section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    background: #f2f2f2 !important;
+    border-color: #f2f2f2 !important;
+    color: var(--text-on-light) !important;
+}
+
+section[data-testid="stSidebar"] .stButton > button[kind="primary"] *,
+section[data-testid="stSidebar"] .stButton > button[kind="primary"] p,
+section[data-testid="stSidebar"] .stButton > button[kind="primary"] span {
+    color: var(--text-on-light) !important;
+}
+
 [data-testid="stBottom"],
 [data-testid="stBottom"] > div,
 [data-testid="stBottom"] > div > div,
 .stChatFloatingInputContainer,
 .stChatFloatingInputContainer > div {
-    background: #0d0f14 !important;
-    border-top: 1px solid #242836 !important;
+    background: transparent !important;
+    border-top: none !important;
     box-shadow: none !important;
 }
-/* The input pill itself */
+
 [data-testid="stChatInput"],
 [data-testid="stChatInput"] > div {
-    background: #161923 !important;
-    border: 1px solid #242836 !important;
-    border-radius: 12px !important;
-    box-shadow: none !important;
+    border-radius: var(--radius) !important;
 }
-/* The textarea */
+
+[data-testid="stChatInput"] {
+    position: relative !important;
+    isolation: isolate !important;
+    overflow: hidden !important;
+    max-width: 900px !important;
+    margin: 0 auto 0.85rem !important;
+    padding: 2px !important;
+    background: var(--panel) !important;
+    border: none !important;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38) !important;
+}
+
+[data-testid="stChatInput"]::before,
+[data-testid="stChatInput"]::after {
+    content: "" !important;
+    position: absolute !important;
+    inset: -70% !important;
+    z-index: 0 !important;
+    background:
+        conic-gradient(
+            from 0deg,
+            #4285f4,
+            #a142f4,
+            #ea4335,
+            #fbbc04,
+            #34a853,
+            #00acc1,
+            #4285f4
+        ) !important;
+    animation: chatInputAuraSpin 9s linear infinite !important;
+}
+
+[data-testid="stChatInput"]::after {
+    filter: blur(16px) !important;
+    opacity: 0.22 !important;
+    animation-duration: 13s !important;
+}
+
+[data-testid="stChatInput"]:focus-within {
+    box-shadow:
+        0 14px 38px rgba(0, 0, 0, 0.48),
+        0 0 0 3px rgba(167, 139, 250, 0.18) !important;
+}
+
+[data-testid="stChatInput"] > div {
+    background: var(--panel) !important;
+    border: none !important;
+    border-radius: calc(var(--radius) - 2px) !important;
+    box-shadow: none !important;
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+@keyframes chatInputAuraSpin {
+    to { transform: rotate(360deg); }
+}
+
 [data-testid="stChatInput"] textarea,
 [data-testid="stChatInputTextArea"] {
-    background: #161923 !important;
-    color: #e8eaf6 !important;
-    caret-color: #6c63ff !important;
-    font-family: 'DM Sans', sans-serif !important;
-    font-size: 0.9rem !important;
-    border: none !important;
-    box-shadow: none !important;
+    background: var(--panel) !important;
+    color: var(--ink) !important;
+    caret-color: var(--indigo) !important;
+    font-size: 0.95rem !important;
 }
-[data-testid="stChatInput"] textarea::placeholder,
+
 [data-testid="stChatInputTextArea"]::placeholder {
-    color: #4b5563 !important;
+    color: var(--muted) !important;
 }
-/* Send button */
+
 [data-testid="stChatInputSubmitButton"] > button {
-    background: #6c63ff !important;
+    background: var(--ink) !important;
     border: none !important;
-    color: white !important;
-    border-radius: 8px !important;
-}
-[data-testid="stChatInputSubmitButton"] > button:hover {
-    background: #5a52e0 !important;
-}
-[data-testid="stChatInputSubmitButton"] > button svg path {
-    fill: white !important;
+    border-radius: 7px !important;
 }
 
-/* ── Metrics ── */
-[data-testid="stMetric"] {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 12px !important;
+[data-testid="stChatInputSubmitButton"] svg,
+[data-testid="stChatInputSubmitButton"] svg path {
+    color: var(--text-on-light) !important;
+    fill: var(--text-on-light) !important;
+    stroke: var(--text-on-light) !important;
 }
 
-/* ── Image display ── */
-.gen-image-wrap {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
-    margin: 10px 0;
-    background: var(--surface);
-    padding: 4px;
+@media (max-width: 860px) {
+    .block-container {
+        padding: 0.9rem 0.75rem 6rem !important;
+    }
+
+    .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .status-row {
+        justify-content: flex-start;
+    }
+
+    .hero-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .yt-card {
+        grid-template-columns: 92px minmax(0, 1fr);
+    }
+
+    .yt-thumb {
+        width: 92px;
+    }
+
+    .agent-progress {
+        align-items: flex-start;
+    }
+
+    .phase-steps {
+        display: none;
+    }
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SESSION STATE INIT
-# ═══════════════════════════════════════════════════════════════════════════════
-def init_state():
+def init_state() -> None:
     if "thread_id" not in st.session_state:
         st.session_state.thread_id = str(uuid.uuid4())
     if "threads" not in st.session_state:
-        # Only show current thread, no history
         st.session_state.threads = [st.session_state.thread_id]
     if "chat_history" not in st.session_state:
-        st.session_state.chat_history = {}          # {thread_id: [msg_dicts]}
-    if "streaming" not in st.session_state:
-        st.session_state.streaming = False
+        st.session_state.chat_history = {}
     if "news" not in st.session_state:
         st.session_state.news = []
 
+
 init_state()
 
-# ─── Ensure current thread has a history list ─────────────────────────────────
 tid = st.session_state.thread_id
 if tid not in st.session_state.chat_history:
     st.session_state.chat_history[tid] = []
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TOOL METADATA
-# ═══════════════════════════════════════════════════════════════════════════════
 TOOL_META = {
-    "tavily_search_results_json": {"icon": "🔍", "label": "Tavily Search",    "color": "#6c63ff"},
-    "TavilySearch":               {"icon": "🔍", "label": "Tavily Search",    "color": "#6c63ff"},
-    "search_youtube_videos":      {"icon": "▶️",  "label": "YouTube Search",  "color": "#ff0000"},
-    "generate_stability_image":   {"icon": "🎨",  "label": "Image Generator", "color": "#ec4899"},
-    "SerpAPI_Search":             {"icon": "🌐",  "label": "SerpAPI Search",  "color": "#00e5ff"},
-    "calculator":                 {"icon": "🧮",  "label": "Calculator",      "color": "#f59e0b"},
-    "DuckDuckGoSearch":           {"icon": "🦆",  "label": "DuckDuckGo",      "color": "#de5833"},
-    "web_search":                 {"icon": "🌐",  "label": "Web Search",      "color": "#00e5ff"},
+    "tavily_search_results_json": {"icon": "S", "label": "Tavily Search"},
+    "tavilysearch": {"icon": "S", "label": "Tavily Search"},
+    "search_youtube_videos": {"icon": "YT", "label": "YouTube Search"},
+    "generate_stability_image": {"icon": "IM", "label": "Image Generator"},
+    "serpapi_search": {"icon": "W", "label": "SerpAPI Search"},
+    "calculator": {"icon": "C", "label": "Calculator"},
+    "duckduckgosearch": {"icon": "W", "label": "DuckDuckGo"},
+    "web_search": {"icon": "W", "label": "Web Search"},
+    "stock": {"icon": "MK", "label": "Market Lookup"},
 }
 
+AGENT_PHASES = ["Thinking", "Reasoning", "Planning", "Executing", "Almost ready"]
+
+
+def safe_html(value: object) -> str:
+    return html.escape(str(value or ""), quote=True)
+
+
+def safe_url(value: object) -> str:
+    text = str(value or "").strip()
+    if text.startswith(("http://", "https://")):
+        return html.escape(text, quote=True)
+    return ""
+
+
+def compact_thread_id(thread_id: str, size: int = 8) -> str:
+    return safe_html(thread_id[:size])
+
+
 def get_tool_meta(name: str) -> dict:
+    key_name = (name or "").lower()
     for key, val in TOOL_META.items():
-        if key.lower() in name.lower() or name.lower() in key.lower():
+        if key.lower() in key_name or key_name in key.lower():
             return val
-    return {"icon": "🔧", "label": name, "color": "#f59e0b"}
+    return {"icon": "T", "label": name or "Tool"}
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# RICH CONTENT RENDERERS
-# ═══════════════════════════════════════════════════════════════════════════════
-def render_youtube_results(data_str: str):
-    """Render YouTube video cards."""
+def redact_debug_value(value: object) -> object:
+    if isinstance(value, dict):
+        redacted = {}
+        for key, item in value.items():
+            normalized_key = str(key).lower()
+            if normalized_key in {"url", "base_url", "response_sample"}:
+                redacted[key] = "[redacted]"
+            else:
+                redacted[key] = redact_debug_value(item)
+        return redacted
+    if isinstance(value, list):
+        return [redact_debug_value(item) for item in value]
+    return value
+
+
+def render_tool_card(tool_name: str, state: str = "completed") -> None:
+    meta = get_tool_meta(tool_name)
+    state_text = "running" if state == "running" else "done"
+    st.markdown(
+        f"""
+        <div class="tool-card {safe_html(state)}">
+            <span class="tool-chip">{safe_html(meta["icon"])}</span>
+            <span class="tool-label">{safe_html(meta["label"])}</span>
+            <span class="tool-state">{state_text}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def phase_from_elapsed(started_at: float, has_tools: bool = False) -> str:
+    if has_tools:
+        return "Executing"
+
+    elapsed = time.monotonic() - started_at
+    if elapsed < 1.2:
+        return "Thinking"
+    if elapsed < 2.8:
+        return "Reasoning"
+    return "Planning"
+
+
+def render_agent_progress(placeholder, phase: str, detail: str = "") -> None:
+    phase = phase if phase in AGENT_PHASES else "Thinking"
+    active_index = AGENT_PHASES.index(phase)
+    detail = detail or "The agent is working through the request."
+    steps = "".join(
+        f'<span class="phase-step {"active" if index <= active_index else ""}"></span>'
+        for index in range(len(AGENT_PHASES))
+    )
+
+    placeholder.markdown(
+        f"""
+        <div class="agent-progress" role="status" aria-live="polite">
+            <div class="agent-spinner"></div>
+            <div class="agent-progress-copy">
+                <div class="agent-progress-phase">{safe_html(phase)}</div>
+                <div class="agent-progress-detail">{safe_html(detail)}</div>
+            </div>
+            <div class="phase-steps">{steps}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+DEEP_STATUS_MARKER = "**Deep Research Progress:**"
+
+
+def clean_progress_line(value: object) -> str:
+    text = str(value or "")
+    text = text.replace("\u2022", "-").replace("\u00e2\u20ac\u00a2", "-")
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = text.strip().lstrip("-*").strip()
+    return " ".join(text.split())
+
+
+def is_progress_line(value: object) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return True
+    return text.startswith(("-", "*", "\u2022", "\u00e2\u20ac\u00a2"))
+
+
+def split_deep_research_status(content: str) -> tuple[str, str]:
+    if DEEP_STATUS_MARKER not in content:
+        return "", content
+
+    before, after = content.split(DEEP_STATUS_MARKER, 1)
+    status_lines = []
+    remainder = []
+    collecting_status = True
+
+    for line in after.splitlines():
+        if collecting_status and is_progress_line(line):
+            cleaned_line = clean_progress_line(line)
+            if cleaned_line:
+                status_lines.append(cleaned_line)
+            continue
+        collecting_status = False
+        remainder.append(line)
+
+    detail = status_lines[-1] if status_lines else "Deep research agent is working through the request."
+    answer_parts = [part.strip() for part in (before, "\n".join(remainder)) if part.strip()]
+    return detail, "\n\n".join(answer_parts)
+
+
+def make_notice(kind: str, title: str, detail: str) -> dict:
+    return {"kind": kind, "title": title, "detail": detail}
+
+
+def render_notice_card(title: str, detail: str, kind: str = "error", placeholder=None) -> None:
+    kind = kind if kind in {"success", "warning", "token", "error"} else "error"
+    orb_text = {"success": "OK", "warning": "!", "token": "TL", "error": "!"}[kind]
+    markup = f"""
+        <div class="notice-card notice-{safe_html(kind)}" role="status" aria-live="polite">
+            <div class="notice-orb">{safe_html(orb_text)}</div>
+            <div class="notice-copy">
+                <div class="notice-title">{safe_html(title)}</div>
+                <div class="notice-detail">{safe_html(detail)}</div>
+            </div>
+        </div>
+    """
+
+    if placeholder is None:
+        st.markdown(markup, unsafe_allow_html=True)
+    else:
+        placeholder.markdown(markup, unsafe_allow_html=True)
+
+
+def classify_failure_text(text: object) -> dict | None:
+    raw_text = str(text or "").strip()
+    normalized = raw_text.lower()
+    if not normalized:
+        return None
+
+    token_markers = [
+        "token limit",
+        "tokens per minute",
+        "tpm",
+        "rate limit",
+        "ratelimit",
+        "quota",
+        "insufficient_quota",
+        "context length",
+        "context_length_exceeded",
+        "maximum context",
+        "max_tokens",
+        "too many tokens",
+        "429",
+    ]
+    if any(marker in normalized for marker in token_markers):
+        return make_notice(
+            "token",
+            "Token limit exceeded",
+            "The model limit looks used up for now. Please come back tomorrow, or try again with a shorter question.",
+        )
+
+    endpoint_markers = [
+        "deep agent service unavailable",
+        "service unavailable",
+        "could not be reached",
+        "cannot reach",
+        "connection failed",
+        "connection refused",
+        "endpoint returned",
+        "endpoints tried",
+        "all endpoints returned errors",
+        "timeout",
+        "timed out",
+        "http 500",
+        "http 502",
+        "http 503",
+        "http 504",
+    ]
+    if any(marker in normalized for marker in endpoint_markers):
+        return make_notice(
+            "warning",
+            "Oops, the service did not finish",
+            "The endpoint may be waking up, busy, or returned an incomplete response. Please wait a moment and try again.",
+        )
+
+    function_call_markers = [
+        "failed_generation",
+        "failed to call a function",
+    ]
+    if any(marker in normalized for marker in function_call_markers):
+        return make_notice(
+            "warning",
+            "Oops, the tool response was not formatted",
+            "The search or tool ran, but the model could not format the final response. Please try the request again with a little more detail.",
+        )
+
+    if normalized.startswith("error:") or normalized.startswith("exception:"):
+        return make_notice(
+            "error",
+            "Oops, something went wrong",
+            "The agent hit an unexpected issue. Please try again in a moment.",
+        )
+
+    return None
+
+
+def classify_service_test(result: dict) -> dict:
+    status = str(result.get("status", "")).lower()
+    endpoints = result.get("working_endpoints", []) or []
+    code = result.get("code")
+
+    def is_http_okish(value: object) -> bool:
+        try:
+            return int(value) < 500
+        except (TypeError, ValueError):
+            return False
+
+    base_reachable = status == "connected" or is_http_okish(code)
+    endpoint_reachable = any(is_http_okish(endpoint.get("status")) for endpoint in endpoints)
+    post_ready = any(
+        str(endpoint.get("method", "")).upper() == "POST"
+        and int(endpoint.get("status", 0)) in {200, 201, 202}
+        for endpoint in endpoints
+        if str(endpoint.get("status", "")).isdigit()
+    )
+    post_alive = any(
+        str(endpoint.get("method", "")).upper() == "POST"
+        and is_http_okish(endpoint.get("status"))
+        for endpoint in endpoints
+    )
+
+    if post_ready:
+        return make_notice(
+            "success",
+            "Deep agent is ready",
+            f"The service responded and the deep task endpoint passed the quick check. {len(endpoints)} endpoint checks returned.",
+        )
+    if base_reachable and post_alive:
+        return make_notice(
+            "warning",
+            "Deep agent is reachable",
+            "The service is online, but the quick POST probe did not return a final success. Your real request can still work if the endpoint expects a richer payload.",
+        )
+    if base_reachable or endpoint_reachable:
+        return make_notice(
+            "success",
+            "Deep agent service is reachable",
+            "The base service responded. If a deep request takes a while, the service may still be warming up.",
+        )
+    if status == "timeout":
+        return make_notice(
+            "warning",
+            "Deep agent is waking up",
+            "The service took too long to answer. Render services can need a short warm-up before the first request completes.",
+        )
+    return make_notice(
+        "error",
+        "Oops, service is not reachable",
+        "The UI could not connect to the deep agent right now. Please retry after a minute or check the service deployment.",
+    )
+
+
+def render_youtube_results(data: object) -> None:
     try:
-        videos = json.loads(data_str)
-        if isinstance(videos, list):
-            for v in videos:
-                st.markdown(f"""
-                <div class="yt-card">
-                    <img class="yt-thumb" src="{v.get('thumbnail','')}">
-                    <div>
-                        <div class="yt-title">{v.get('title','')}</div>
-                        <a class="yt-link" href="{v.get('link','')}" target="_blank">
-                            ▶ Watch on YouTube
-                        </a>
-                    </div>
-                </div>""", unsafe_allow_html=True)
+        videos = json.loads(data) if isinstance(data, str) else data
     except Exception:
-        st.text(data_str)
+        st.text(str(data))
+        return
+
+    if not isinstance(videos, list):
+        st.json(videos)
+        return
+
+    for video in videos:
+        if not isinstance(video, dict):
+            continue
+
+        title = safe_html(video.get("title", "Untitled video"))
+        link = safe_url(video.get("link", ""))
+        thumbnail = safe_url(video.get("thumbnail", ""))
+        image_markup = (
+            f'<img class="yt-thumb" src="{thumbnail}" alt="">'
+            if thumbnail
+            else '<div class="yt-thumb"></div>'
+        )
+        link_markup = (
+            f'<a class="yt-link" href="{link}" target="_blank" rel="noopener noreferrer">Open video</a>'
+            if link
+            else ""
+        )
+
+        st.markdown(
+            f"""
+            <div class="yt-card">
+                {image_markup}
+                <div>
+                    <div class="yt-title">{title}</div>
+                    {link_markup}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
-
-def render_image(data_str: str):
-    """Render a base64 generated image."""
+def render_image(data: object) -> None:
     try:
-        d = json.loads(data_str) if isinstance(data_str, str) else data_str
-        if "image_data" in d:
-            img_bytes = base64.b64decode(d["image_data"])
-            img = Image.open(BytesIO(img_bytes))
-            st.markdown('<div class="gen-image-wrap">', unsafe_allow_html=True)
-            st.image(img, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-        elif "error" in d:
-            st.error(f"Image generation failed: {d['error']}")
-    except Exception as e:
-        st.text(str(data_str))
+        payload = json.loads(data) if isinstance(data, str) else data
+        if not isinstance(payload, dict):
+            st.text(str(data))
+            return
+
+        if "image_data" in payload:
+            img_bytes = base64.b64decode(payload["image_data"])
+            image = Image.open(BytesIO(img_bytes))
+            st.markdown('<div class="image-frame">', unsafe_allow_html=True)
+            st.image(image, use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        elif "error" in payload:
+            st.error(f"Image generation failed: {payload['error']}")
+        else:
+            st.json(payload)
+    except Exception:
+        st.text(str(data))
 
 
-def render_tool_result(tool_name: str, content: str):
-    """Route tool output to the correct renderer or fallback to text."""
-    tl = tool_name.lower()
-    if "youtube" in tl:
+def render_tool_result(tool_name: str, content: object) -> None:
+    tool_key = (tool_name or "").lower()
+    if "youtube" in tool_key:
         render_youtube_results(content)
-    elif "image" in tl or "stability" in tl:
+    elif "image" in tool_key or "stability" in tool_key:
         render_image(content)
     else:
-        # Generic: try pretty JSON, else plain text
         try:
-            parsed = json.loads(content)
+            parsed = json.loads(content) if isinstance(content, str) else content
             st.json(parsed)
         except Exception:
-            st.markdown(content)
+            st.text(str(content))
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# RENDER EXISTING MESSAGES
-# ═══════════════════════════════════════════════════════════════════════════════
-def render_message(msg: dict):
-    """Render a single stored message dict."""
-    role    = msg["role"]
+def render_chat_message(role: str, content: str, is_status: bool = False) -> None:
+    avatar_role = "user" if role == "user" else "assistant"
+    with st.chat_message(avatar_role):
+        if is_status:
+            st.caption("Deep research agent")
+        st.markdown(content or "_No response was returned._")
+
+
+def render_message(msg: dict) -> None:
+    role = msg.get("role")
     content = msg.get("content", "")
 
     if role == "user":
-        st.markdown(f"""
-        <div class="msg-user">
-            <div class="msg-label">You</div>
-            {content}
-        </div>""", unsafe_allow_html=True)
-
+        render_chat_message("user", content)
     elif role == "assistant":
-        st.markdown(f"""
-        <div class="msg-ai">
-            <div class="msg-label">⚡ Agent</div>
-            {content if content else '<em style="opacity:.4">Processing…</em>'}
-        </div>""", unsafe_allow_html=True)
-
+        _, visible_content = split_deep_research_status(str(content))
+        if visible_content:
+            render_chat_message("assistant", visible_content)
+    elif role == "notice":
+        render_notice_card(
+            msg.get("title", "Oops, something went wrong"),
+            msg.get("detail", "Please try again in a moment."),
+            msg.get("kind", "error"),
+        )
     elif role == "tool_call":
-        meta = get_tool_meta(msg.get("tool_name", ""))
-        st.markdown(f"""
-        <div class="tool-card done">
-            <span>✅</span>
-            <span>{meta['icon']} {meta['label']}</span>
-            <span style="color:#6b7280;margin-left:auto;font-size:.7rem">completed</span>
-        </div>""", unsafe_allow_html=True)
+        render_tool_card(msg.get("tool_name", "tool"), "completed")
         if msg.get("render_output"):
-            render_tool_result(msg["tool_name"], msg["tool_output"])
-
+            render_tool_result(msg.get("tool_name", ""), msg.get("tool_output", ""))
     elif role == "tool_result_text":
-        st.markdown(msg.get("content", ""))
+        st.text(str(content))
 
 
-def render_history():
-    """Render all messages in the current thread."""
-    history = st.session_state.chat_history.get(tid, [])
-    for msg in history:
-        render_message(msg)
+def render_history() -> None:
+    for message in st.session_state.chat_history.get(tid, []):
+        render_message(message)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# STREAMING CORE
-# ═══════════════════════════════════════════════════════════════════════════════
-def stream_chat(user_prompt: str):
-    """
-    Stream the agent response token-by-token.
-    Show tool-call indicators as they fire.
-    """
-    config    = {"configurable": {"thread_id": tid}}
+def render_assistant_stream(placeholder, content: str, is_status: bool = False) -> None:
+    with placeholder.container():
+        with st.chat_message("assistant"):
+            if is_status:
+                st.caption("Deep research agent")
+            if content:
+                st.markdown(content)
+            st.caption("Thinking...")
+
+
+def stream_chat(user_prompt: str) -> None:
+    config = {"configurable": {"thread_id": tid}}
     input_msg = {"messages": [HumanMessage(content=user_prompt)]}
 
-    # Append user message to history
     st.session_state.chat_history[tid].append({"role": "user", "content": user_prompt})
-    st.markdown(f"""
-    <div class="msg-user">
-        <div class="msg-label">You</div>
-        {user_prompt}
-    </div>""", unsafe_allow_html=True)
+    render_chat_message("user", user_prompt)
 
-    # Placeholders we'll update live
+    status_placeholder = st.empty()
     tool_placeholder = st.empty()
-    ai_placeholder   = st.empty()
+    ai_placeholder = st.empty()
 
-    # Tracking state
-    full_text         = ""
-    active_tool_calls = {}   # id → {name, args_str}
-    finished_tools    = []   # list of tool names already completed
-    tool_messages     = []   # ToolMessage objects received
+    full_text = ""
+    is_deep_research_request = requires_deep_research(user_prompt)
+    active_tool_calls = {}
+    finished_tools = []
+    tool_messages = []
+    started_at = time.monotonic()
+    current_phase = "Thinking"
 
-    def render_active_tools():
-        if not active_tool_calls and not finished_tools:
-            tool_placeholder.empty()
-            return
-        html = ""
-        for tc in finished_tools:
-            meta = get_tool_meta(tc)
-            html += f"""
-            <div class="tool-card done">
-                <span class="dot-spin dot-done"></span>
-                <span>{meta['icon']} {meta['label']}</span>
-                <span style="color:#6b7280;margin-left:auto;font-size:.7rem">done</span>
-            </div>"""
-        for tc_id, tc_data in active_tool_calls.items():
-            meta = get_tool_meta(tc_data["name"])
-            html += f"""
-            <div class="tool-card">
-                <span class="dot-spin"></span>
-                <span>{meta['icon']} {meta['label']}</span>
-                <span style="color:#6b7280;margin-left:auto;font-size:.7rem">running…</span>
-            </div>"""
-        tool_placeholder.markdown(html, unsafe_allow_html=True)
+    def update_agent_progress(phase: str | None = None, detail: str = "") -> None:
+        nonlocal current_phase
+        if phase is None:
+            phase = phase_from_elapsed(started_at, has_tools=bool(active_tool_calls))
+        if AGENT_PHASES.index(phase) < AGENT_PHASES.index(current_phase):
+            phase = current_phase
+        current_phase = phase
+        render_agent_progress(status_placeholder, phase, detail)
 
-    # ── Stream ──────────────────────────────────────────────────────────────
-    print(f"\n[STREAM] Step 1: Starting stream for prompt: {user_prompt[:50]}...")
-    print(f"[STREAM] Step 2: Config = {config}")
-    print(f"[STREAM] Step 3: Input message created")
-    
+    update_agent_progress("Thinking", "Reading your query and preparing the response path.")
+    time.sleep(0.12)
+    update_agent_progress("Reasoning", "Reviewing context and intent.")
+    time.sleep(0.12)
+    update_agent_progress("Planning", "Choosing the next action.")
+    if is_deep_research_request:
+        update_agent_progress("Executing", "Deep research agent is collecting and synthesizing results.")
+
+    def render_active_tools() -> None:
+        with tool_placeholder.container():
+            if not active_tool_calls and not finished_tools:
+                st.empty()
+                return
+
+            for finished_name in finished_tools:
+                render_tool_card(finished_name, "completed")
+            for tool_data in active_tool_calls.values():
+                render_tool_card(tool_data.get("name", "Tool"), "running")
+
     try:
-        print("[STREAM] Step 4: Calling chatbot.stream()...")
         stream_iterator = chatbot.stream(input_msg, config, stream_mode="messages")
-        print(f"[STREAM] Step 5: Got stream iterator: {type(stream_iterator)}")
-        
-        chunk_count = 0
+
         for chunk, metadata in stream_iterator:
-            chunk_count += 1
-            print(f"[STREAM] Step 5.{chunk_count}: Received chunk #{chunk_count}")
-            print(f"[STREAM]   - Type: {type(chunk).__name__}")
-            print(f"[STREAM]   - Node: {metadata.get('langgraph_node', 'unknown')}")
-            
             node = metadata.get("langgraph_node", "")
+            update_agent_progress(detail="Reasoning over the conversation context.")
 
-            # ── Tool call being assembled (AIMessageChunk) ─────────────────
-            if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
-                for tc_chunk in chunk.tool_call_chunks:
-                    tc_id   = tc_chunk.get("id")
-                    tc_name = tc_chunk.get("name", "")
-                    if tc_id and tc_id not in active_tool_calls:
-                        active_tool_calls[tc_id] = {"name": tc_name, "args": ""}
-                    if tc_id and tc_name:
-                        active_tool_calls[tc_id]["name"] = tc_name
+            tool_call_chunks = getattr(chunk, "tool_call_chunks", None) or getattr(chunk, "tool_calls", None)
+            if tool_call_chunks:
+                for tool_chunk in tool_call_chunks:
+                    tool_id = tool_chunk.get("id")
+                    tool_name = tool_chunk.get("name", "")
+                    if tool_id and tool_id not in active_tool_calls:
+                        active_tool_calls[tool_id] = {"name": tool_name or "Tool", "args": ""}
+                    if tool_id and tool_name:
+                        active_tool_calls[tool_id]["name"] = tool_name
+                update_agent_progress("Planning", "Selecting the right tool or route for this step.")
                 render_active_tools()
 
-            # ── Tool result arrived (ToolMessage) ──────────────────────────
             if isinstance(chunk, ToolMessage):
-                tool_name = chunk.name or "tool"
-                # Mark corresponding tool call as finished
-                for tc_id, tc_data in list(active_tool_calls.items()):
-                    if tc_data["name"].lower() == tool_name.lower() or True:
-                        finished_tools.append(tc_data["name"])
-                        del active_tool_calls[tc_id]
+                tool_name = chunk.name or "Tool"
+                matched_id = None
+                for tool_id, tool_data in active_tool_calls.items():
+                    if tool_data.get("name", "").lower() == tool_name.lower():
+                        matched_id = tool_id
                         break
+                if matched_id is None and active_tool_calls:
+                    matched_id = next(iter(active_tool_calls))
+                if matched_id:
+                    finished_tools.append(active_tool_calls.pop(matched_id).get("name", tool_name))
+                else:
+                    finished_tools.append(tool_name)
                 tool_messages.append(chunk)
+                update_agent_progress("Executing", f"Finished running {tool_name}.")
                 render_active_tools()
 
-            # ── Streaming AI text (chat_node) ──────────────────────────────
             if node == "chat_node" and hasattr(chunk, "content") and chunk.content:
                 if isinstance(chunk.content, str):
-                    full_text += chunk.content
-                    ai_placeholder.markdown(f"""
-                    <div class="msg-ai">
-                        <div class="msg-label">⚡ Agent</div>
-                        {full_text}▌
-                    </div>""", unsafe_allow_html=True)
+                    if tool_call_chunks:
+                        continue
 
-    except Exception as e:
-        error_msg = str(e)
-        full_traceback = traceback.format_exc()
-        print(f"\n[ERROR] Stream failed!")
-        print(f"[ERROR] Error type: {type(e).__name__}")
-        print(f"[ERROR] Error message: {error_msg}")
-        print(f"[ERROR] Full traceback:\n{full_traceback}")
-        
-        # Check if it's an API key issue
-        if "API" in str(e) or "key" in str(e).lower() or "401" in str(e) or "403" in str(e):
-            ai_placeholder.error(
-                "🔑 **API Key Error**\n\n"
-                "Your API keys might be missing or invalid.\n\n"
-                "**On Render, did you add these to Environment Variables?**\n"
-                "- GROQ_API_KEY\n"
-                "- SERPAPI_API_KEY\n\n"
-                "Check Render Logs for details."
+                    deep_status_detail, response_fragment = split_deep_research_status(chunk.content)
+                    if deep_status_detail:
+                        update_agent_progress("Executing", deep_status_detail)
+                    if not response_fragment.strip():
+                        continue
+
+                    if not full_text:
+                        update_agent_progress("Executing", "Running the response path.")
+                    full_text += response_fragment
+                    update_agent_progress("Almost ready", "Composing the final response.")
+                    render_assistant_stream(ai_placeholder, full_text)
+
+    except Exception as exc:
+        status_placeholder.empty()
+        debug_log(traceback.format_exc())
+        error_text = str(exc)
+        notice = classify_failure_text(error_text)
+        if notice is None and (
+            "api" in error_text.lower()
+            or "key" in error_text.lower()
+            or "401" in error_text
+            or "403" in error_text
+        ):
+            notice = make_notice(
+                "error",
+                "Authentication needs attention",
+                "One service could not authenticate. Please check the deployment environment variables.",
             )
-        else:
-            ai_placeholder.error(
-                f"⚠️ **Error**: {error_msg}\n\n"
-                "**Check Render logs for details:**\n"
-                f"Error type: {type(e).__name__}\n\n"
-                "**Possible causes:**\n"
-                "- API keys not set in Render Environment Variables\n"
-                "- Network error connecting to AI service\n"
-                "- Backend configuration issue"
+        if notice is None:
+            notice = make_notice(
+                "error",
+                "Oops, the agent stopped",
+                "The request could not be completed right now. Please try again in a moment.",
             )
+        render_notice_card(notice["title"], notice["detail"], notice["kind"], placeholder=ai_placeholder)
+        st.session_state.chat_history.setdefault(tid, []).append({"role": "notice", **notice})
         return
 
-    print(f"[STREAM] Streaming complete! Received {chunk_count} total chunks")
-    print(f"[STREAM] Full text length: {len(full_text)} characters")
-    print(f"[STREAM] Full text: {full_text[:100]}...")
-
-    # ── Final AI message ─────────────────────────────────────────────────────
-    print("[STREAM] Displaying final message...")
     if full_text:
-        ai_placeholder.markdown(f"""
-        <div class="msg-ai">
-            <div class="msg-label">⚡ Agent</div>
-            {full_text}
-        </div>""", unsafe_allow_html=True)
+        ai_placeholder.empty()
+        notice = classify_failure_text(full_text)
+        if notice:
+            render_notice_card(notice["title"], notice["detail"], notice["kind"])
+        else:
+            render_chat_message("assistant", full_text)
+    else:
+        notice = make_notice(
+            "warning",
+            "Oops, no response came back",
+            "The agent finished without returning text. Please try again with a shorter or clearer query.",
+        )
+        render_notice_card(notice["title"], notice["detail"], notice["kind"])
 
-    # ── Persist to history ───────────────────────────────────────────────────
     history = st.session_state.chat_history.setdefault(tid, [])
-
-    # Store tool call records
     for tool_msg in tool_messages:
-        tool_name = tool_msg.name or "tool"
-        content   = tool_msg.content or ""
-        # Decide if we want to render rich output
+        tool_name = tool_msg.name or "Tool"
+        content = tool_msg.content or ""
         rich_tools = {"youtube", "stock", "image", "stability"}
-        should_render = any(r in tool_name.lower() for r in rich_tools)
-        history.append({
-            "role":         "tool_call",
-            "tool_name":    tool_name,
-            "tool_output":  content,
-            "render_output": should_render,
-        })
-        # If rich tool, render inline now
+        should_render = any(key in tool_name.lower() for key in rich_tools)
+        history.append(
+            {
+                "role": "tool_call",
+                "tool_name": tool_name,
+                "tool_output": content,
+                "render_output": should_render,
+            }
+        )
         if should_render:
             render_tool_result(tool_name, content)
 
-    # Store AI response
     if full_text:
-        history.append({"role": "assistant", "content": full_text})
+        notice = classify_failure_text(full_text)
+        if notice:
+            history.append({"role": "notice", **notice})
+        else:
+            history.append(
+                {
+                    "role": "assistant",
+                    "content": full_text,
+                    "is_status": False,
+                }
+            )
+    else:
+        history.append(
+            {
+                "role": "notice",
+                **notice,
+            }
+        )
 
     tool_placeholder.empty()
-    
-    print(f"[STREAM] ✓ stream_chat() completed successfully!")
-    print(f"[STREAM] Final history size: {len(history)} messages\n")
+    status_placeholder.empty()
+    debug_log(f"stream completed with {len(tool_messages)} tool messages")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SIDEBAR
-# ═══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    # ── Logo / Header ─────────────────────────────────────────────────────────
-    st.markdown("""
-    <div style="text-align:center;padding:20px 0 14px">
-        <div style="font-family:'Space Mono',monospace;font-size:1.3rem;
-                    color:#6c63ff;letter-spacing:.05em">⚡ AGENTIC AI</div>
-        <div style="font-size:.72rem;color:#6b7280;margin-top:4px;
-                    letter-spacing:.1em;text-transform:uppercase">
-            Multi-Tool Chat System
+    st.markdown(
+        """
+        <div class="sidebar-brand">
+            <div class="sidebar-mark">AI</div>
+            <div>
+                <div class="sidebar-title">Agentic AI</div>
+                <div class="sidebar-note">LangGraph workspace</div>
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="sidebar-section-title">Conversation</div>', unsafe_allow_html=True)
+    if st.button("New chat", use_container_width=True, type="primary"):
+        new_tid = str(uuid.uuid4())
+        st.session_state.threads.insert(0, new_tid)
+        st.session_state.thread_id = new_tid
+        st.session_state.chat_history[new_tid] = []
+        st.rerun()
+
+    st.markdown(
+        f'<div class="current-thread">Thread {compact_thread_id(tid, 12)}</div>',
+        unsafe_allow_html=True,
+    )
 
     st.divider()
-
-    # ── Thread management ─────────────────────────────────────────────────────
-    st.markdown('<div class="sidebar-title">💬 Conversations</div>', unsafe_allow_html=True)
-
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        if st.button("＋ New Chat", use_container_width=True, type="primary"):
-            new_tid = str(uuid.uuid4())
-            st.session_state.threads.insert(0, new_tid)
-            st.session_state.thread_id = new_tid
-            st.session_state.chat_history[new_tid] = []
-            st.rerun()
-    with col2:
-        if st.button("🗑", help="Clear current chat", use_container_width=True):
-            st.session_state.chat_history[tid] = []
-            st.rerun()
-
-    st.markdown("<div style='height:6px'/>", unsafe_allow_html=True)
-
-    # Show current thread info
-    st.markdown(f"""
-    <div style="padding:8px 12px;background:#242836;border-radius:8px;
-                font-size:.85rem;color:#9ca3af;text-align:center">
-        Current: <span style="color:#6c63ff">{tid[:8]}…</span>
-    </div>""", unsafe_allow_html=True)
-
-    st.divider()
-
-    # Footer
-    st.markdown("""
-    <div style="text-align:center;padding:12px 0;font-size:.75rem;color:#6b7280">
-        🚀 Powered by LangGraph + Groq
-    </div>""", unsafe_allow_html=True)
-
-    st.divider()
-
-    # ── Stats ─────────────────────────────────────────────────────────────────
-    msg_count = len(st.session_state.chat_history.get(tid, []))
+    message_count = len(st.session_state.chat_history.get(tid, []))
     thread_count = len(st.session_state.threads)
-    c1, c2 = st.columns(2)
-    c1.metric("Messages", msg_count)
-    c2.metric("Threads",  thread_count)
+    metric_col_1, metric_col_2 = st.columns(2)
+    metric_col_1.metric("Messages", message_count)
+    metric_col_2.metric("Threads", thread_count)
 
-    st.markdown("""
-    <div style="text-align:center;margin-top:16px;font-size:.7rem;color:#374151">
-        Powered by LangGraph · Groq · SDXL
-    </div>""", unsafe_allow_html=True)
+    st.divider()
+    st.markdown('<div class="sidebar-section-title">Deep agent</div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="deep-agent-card">
+            <div class="deep-agent-card-title">Deep agent enabled</div>
+            <div class="deep-agent-card-detail">Research route is ready for detailed analysis.</div>
+            <div class="deep-agent-card-status">
+                <span class="deep-agent-spark"></span>
+                Live
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("Test service", use_container_width=True):
+        try:
+            result = test_deep_agent_connection()
+        except Exception as exc:
+            debug_log(traceback.format_exc())
+            render_notice_card(
+                "Oops, service check failed",
+                "The check could not complete from this UI session. Please try again in a moment.",
+                "error",
+            )
+            if APP_DEBUG:
+                st.caption(f"{type(exc).__name__}: {exc}")
+        else:
+            notice = classify_service_test(result)
+            render_notice_card(notice["title"], notice["detail"], notice["kind"])
+            if APP_DEBUG:
+                with st.expander("Debug details"):
+                    st.json(redact_debug_value(result))
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# MAIN CHAT AREA
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# ── Header ────────────────────────────────────────────────────────────────────
-st.markdown(f"""
-<div style="display:flex;align-items:center;justify-content:space-between;
-            padding:4px 0 16px;border-bottom:1px solid #242836;margin-bottom:18px">
-    <div>
-        <h2 style="margin:0;font-family:'Space Mono',monospace;font-size:1.1rem;
-                   color:#e8eaf6">⚡ Agentic Chat</h2>
-        <div style="font-size:.75rem;color:#6b7280;margin-top:2px;
-                    font-family:'Space Mono',monospace">
-            Thread: {tid[:16]}…
+st.markdown(
+    f"""
+    <div class="app-shell">
+        <div class="topbar">
+            <div class="brand-lockup">
+                <div class="brand-mark">AI</div>
+                <div>
+                    <div class="brand-title">Agentic Chat</div>
+                    <div class="brand-subtitle">Thread {compact_thread_id(tid, 16)}</div>
+                </div>
+            </div>
+            <div class="status-row">
+                <div class="status-pill"><strong>Live</strong></div>
+                <div class="deep-agent-pill"><span class="deep-agent-spark"></span><span>Deep agent live</span></div>
+                <div class="thread-pill">{len(st.session_state.chat_history.get(tid, []))} messages</div>
+            </div>
         </div>
     </div>
-    <div style="display:flex;gap:8px;">
-        <div style="background:#1a1f2e;border:1px solid #242836;border-radius:6px;
-                    padding:5px 10px;font-size:.75rem;color:#1db954">
-            ● Live
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True,
+)
 
-# ── Empty state ───────────────────────────────────────────────────────────────
 history = st.session_state.chat_history.get(tid, [])
 
-# Quick-prompt trigger — set by suggestion buttons below
 if "quick_prompt" in st.session_state:
-    qp = st.session_state.pop("quick_prompt")
-    stream_chat(qp)
+    quick_prompt = st.session_state.pop("quick_prompt")
+    stream_chat(quick_prompt)
     st.rerun()
 
 if not history:
-    # Hero text
-    st.markdown("""
-    <div style="text-align:center;padding:48px 20px 28px">
-        <div style="font-size:2.8rem;margin-bottom:10px">⚡</div>
-        <div style="font-family:'Space Mono',monospace;font-size:1.05rem;
-                    color:#6b7280;margin-bottom:8px">
-            Ready to assist
+    st.markdown(
+        """
+        <div class="hero-panel">
+            <div class="hero-grid">
+                <div>
+                    <div class="section-kicker">Agent console</div>
+                    <div class="hero-title">Agentic Chat</div>
+                    <div class="hero-copy">New session ready.</div>
+                </div>
+                <div class="signal-panel">
+                    <div class="signal-title">Active routes</div>
+                    <div class="signal-list">
+                        <div class="signal-item"><span><span class="signal-dot"></span> Search</span><span>ready</span></div>
+                        <div class="signal-item"><span><span class="signal-dot teal"></span> Video</span><span>ready</span></div>
+                        <div class="signal-item"><span><span class="signal-dot amber"></span> Image</span><span>ready</span></div>
+                        <div class="signal-item"><span><span class="signal-dot coral"></span> Math</span><span>ready</span></div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div style="font-size:.875rem;color:#4b5563;max-width:420px;margin:0 auto;
-                    line-height:1.6;">
-            Ask me anything — I can search the web, find YouTube videos,
-            generate images, look up stocks, and do maths.
-        </div>
-    </div>""", unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
 
-    # Suggestion cards — 3 columns × 2 rows using real Streamlit buttons
+    st.markdown('<div class="suggestion-wrap"><div class="section-kicker">Prompts</div></div>', unsafe_allow_html=True)
     suggestions = [
-        ("🔍", "Search latest AI news"),
-        ("▶️", "Find Python tutorials on YouTube"),
-        ("🧮", "Calculate 1234 × 5678"),
-        ("🌐", "Search for LangGraph tutorials"),
-        ("📊", "What is machine learning?"),
-        ("💡", "Explain quantum computing"),
+        "Search latest AI news",
+        "Find Python tutorials on YouTube",
+        "Calculate 1234 x 5678",
+        "Search for LangGraph tutorials",
+        "What is machine learning?",
+        "Explain quantum computing",
     ]
 
-    # Inject button style override once
-    st.markdown("""
-    <style>
-    div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
-        background: #161923 !important;
-        border: 1px solid #242836 !important;
-        border-radius: 10px !important;
-        color: #9ca3af !important;
-        font-size: .82rem !important;
-        padding: 14px 10px !important;
-        height: auto !important;
-        white-space: normal !important;
-        text-align: center !important;
-        transition: border-color .2s, color .2s !important;
-    }
-    div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
-        border-color: #6c63ff !important;
-        color: #e8eaf6 !important;
-    }
-    </style>""", unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(3)
-    cols = [col1, col2, col3]
-    for i, (icon, label) in enumerate(suggestions):
-        with cols[i % 3]:
-            if st.button(f"{icon}  {label}", key=f"sugg_{i}", use_container_width=True):
+    columns = st.columns(3)
+    for index, label in enumerate(suggestions):
+        with columns[index % 3]:
+            if st.button(label, key=f"suggestion_{index}", use_container_width=True):
                 st.session_state["quick_prompt"] = label
                 st.rerun()
-
 else:
-    # ── Render existing messages ───────────────────────────────────────────────
     render_history()
 
-# ── Chat input ────────────────────────────────────────────────────────────────────────────
-# Re-inject CSS every render cycle so Streamlit late-mounted DOM nodes get styled.
-_CHAT_BAR_CSS = (
-    "<style>"
-    "[data-testid='stBottom']{background:#0d0f14!important;"
-    "border-top:1px solid #242836!important;}"
-    "[data-testid='stBottom']>div,"
-    "[data-testid='stBottom']>div>div{background:#0d0f14!important;}"
-    "[data-testid='stChatInput']{background:#161923!important;"
-    "border:1px solid #242836!important;border-radius:12px!important;}"
-    "[data-testid='stChatInput']>div{background:#161923!important;"
-    "border-radius:12px!important;}"
-    "[data-testid='stChatInputTextArea']{background:#161923!important;"
-    "color:#e8eaf6!important;caret-color:#6c63ff!important;}"
-    "[data-testid='stChatInputTextArea']::placeholder{color:#4b5563!important;}"
-    "[data-testid='stChatInputSubmitButton']>button{"
-    "background:#6c63ff!important;border:none!important;border-radius:8px!important;}"
-    ".stChatFloatingInputContainer,.stChatFloatingInputContainer>div{"
-    "background:#0d0f14!important;box-shadow:none!important;}"
-    "</style>"
-)
-st.markdown(_CHAT_BAR_CSS, unsafe_allow_html=True)
 
-prompt = st.chat_input("Message the agent…  (search · image · stock · YouTube · maths)")
+prompt = st.chat_input("Message the agent")
 
 if prompt:
-    print(f"\n[MAIN] User entered prompt: {prompt}")
-    print(f"[MAIN] Calling stream_chat()...")
-    stream_chat(prompt.strip())
-    print(f"[MAIN] stream_chat() returned, calling st.rerun()...")
-    st.rerun()
+    cleaned_prompt = prompt.strip()
+    if cleaned_prompt:
+        stream_chat(cleaned_prompt)
+        st.rerun()
